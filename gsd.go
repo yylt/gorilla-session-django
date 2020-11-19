@@ -1,12 +1,9 @@
 package gorilla_session_django
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"sync"
 
 	"github.com/gorilla/sessions"
 	"github.com/yylt/gorilla-session-django/internal/github.com/nlpodyssey/gopickle/pickle"
@@ -15,12 +12,6 @@ import (
 var _ sessions.Store = &Store{}
 
 var (
-	bufpool = sync.Pool{
-		New: func() interface{} {
-			return &bytes.Buffer{}
-		},
-	}
-
 	defaultSessionCfg = &sessions.Options{
 		Path:     "/",
 		Domain:   "",
@@ -35,6 +26,7 @@ type Store struct {
 	cfg            *Gsd_config
 	memcli         Memcacher
 	sessionOptions *sessions.Options
+	value          interface{}
 }
 
 func (s *Store) Get(r *http.Request, name string) (*sessions.Session, error) {
@@ -65,27 +57,32 @@ func (s *Store) New(r *http.Request, name string) (*sessions.Session, error) {
 	if err != nil {
 		return session, err
 	}
-	buf := bufpool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer bufpool.Put(buf)
-	buf.WriteString(data)
-	err = s.valueCheck(buf)
-	return session, err
+	return session, s.valueCheck([]byte(data))
 }
 
-func (s *Store) valueCheck(reader io.Reader) error {
+func (s *Store) Values() map[string]interface{} {
+	v, ok := s.value.(map[string]interface{})
+	if ok {
+		return v
+	}
+	return nil
+}
+
+func (s *Store) valueCheck(data []byte) error {
 	var (
 		value interface{}
 		err   error
 	)
 	if !s.cfg.JsonSerializer {
-		value, err = pickle.NewUnpickler(reader).Load()
+		value, err = pickle.Loads(string(data))
 	} else {
-		err = json.NewDecoder(reader).Decode(&value)
+		err = json.Unmarshal(data, &value)
 	}
 	if err != nil {
 		return err
 	}
+	s.value = value
+
 	if s.cfg.Auth != nil {
 		return s.cfg.Auth(value)
 	}

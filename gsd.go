@@ -3,6 +3,7 @@ package gorilla_session_django
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/yylt/gorilla-session-django/internal/github.com/nlpodyssey/gopickle/types"
 	"net/http"
 
 	"github.com/gorilla/sessions"
@@ -22,11 +23,12 @@ var (
 	}
 )
 
+//(TODO) the session values support more type
 type Store struct {
 	cfg            *Gsd_config
 	memcli         Memcacher
 	sessionOptions *sessions.Options
-	value          interface{}
+	value          map[string]string
 }
 
 func (s *Store) Get(r *http.Request, name string) (*sessions.Session, error) {
@@ -49,7 +51,7 @@ func (s *Store) New(r *http.Request, name string) (*sessions.Session, error) {
 		return session, err
 	}
 	if s.cfg.PrefixMemcache != "" {
-		newkey = fmt.Sprint("%s%s", s.cfg.PrefixMemcache, cookie.Value)
+		newkey = fmt.Sprintf("%s%s", s.cfg.PrefixMemcache, cookie.Value)
 	} else {
 		newkey = cookie.Value
 	}
@@ -60,12 +62,8 @@ func (s *Store) New(r *http.Request, name string) (*sessions.Session, error) {
 	return session, s.valueCheck([]byte(data))
 }
 
-func (s *Store) Values() map[string]interface{} {
-	v, ok := s.value.(map[string]interface{})
-	if ok {
-		return v
-	}
-	return nil
+func (s *Store) Values() map[string]string {
+	return s.value
 }
 
 func (s *Store) valueCheck(data []byte) error {
@@ -81,10 +79,25 @@ func (s *Store) valueCheck(data []byte) error {
 	if err != nil {
 		return err
 	}
-	s.value = value
+	dict, ok := value.(*types.Dict)
+	if !ok {
+		return fmt.Errorf("value is not dict")
+	}
+	s.value = make(map[string]string)
+	dict.Item(func(k, v interface{}) {
+		ks, ok := k.(string)
+		if !ok {
+			return
+		}
+		vs, ok := v.(string)
+		if !ok {
+			return
+		}
+		s.value[ks] = vs
+	})
 
 	if s.cfg.Auth != nil {
-		return s.cfg.Auth(value)
+		return s.cfg.Auth(s.value)
 	}
 	return nil
 }
@@ -94,7 +107,7 @@ func (s *Store) Save(r *http.Request, w http.ResponseWriter, session *sessions.S
 	return nil
 }
 
-func NewSessionStore(memcacher Memcacher, cfg *Gsd_config, sessioncfg *sessions.Options) sessions.Store {
+func NewSessionStore(memcacher Memcacher, cfg *Gsd_config, sessioncfg *sessions.Options) *Store {
 	if sessioncfg != nil {
 		defaultSessionCfg = sessioncfg
 	}

@@ -36,6 +36,16 @@ func (d *Dict) Get(key interface{}) (interface{}, bool) {
 	return value, ok
 }
 
+//Item every key-value
+func (d *Dict) Item(fn func(k, v interface{})) {
+	if d == nil {
+		return
+	}
+	for k, v := range *d {
+		fn(k, v)
+	}
+}
+
 // Len returns the length of the Dict, that is, the amount of key/value pairs
 // contained by the Dict.
 func (d *Dict) Len() int {

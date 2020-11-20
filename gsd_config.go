@@ -5,7 +5,7 @@ type Gsd_config struct {
 	CookieKey string
 
 	//auth function to impl auth
-	Auth func(interface{}) error
+	Auth func(map[string]string) error
 
 	// json serializer,use pickle if false
 	JsonSerializer bool
